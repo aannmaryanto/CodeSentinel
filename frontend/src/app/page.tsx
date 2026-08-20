@@ -1,17 +1,59 @@
+'use client';
+
+import React, { useState } from 'react';
+import { Sidebar } from '../components/Sidebar';
+import { Header } from '../components/Header';
+import { DashboardHero } from '../components/DashboardHero';
+import { MetricCards } from '../components/MetricCards';
+import { RecentReviews } from '../components/RecentReviews';
+import { LatestFindings } from '../components/LatestFindings';
+import { QuickCodeReview } from '../components/QuickCodeReview';
+
 export default function Home() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleNewReviewClick = () => {
+    const section = document.getElementById('quick-review-section');
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
-      <div className="max-w-md text-center space-y-4">
-        <h1 className="text-4xl font-bold tracking-tight">CodeSentinel</h1>
-        <p className="text-lg text-zinc-600 dark:text-zinc-400">
-          AI-powered code review for GitHub pull requests.
-        </p>
-        <div className="pt-6 border-t border-zinc-200 dark:border-zinc-800">
-          <p className="text-sm text-zinc-500 dark:text-zinc-500">
-            Application foundation initialized.
-          </p>
-        </div>
+    <div className="min-h-screen bg-[#080b12] text-zinc-100 flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white">
+      {/* Sidebar Navigation */}
+      <Sidebar mobileOpen={mobileMenuOpen} setMobileOpen={setMobileMenuOpen} />
+
+      {/* Main Content Area */}
+      <div className="lg:pl-64 flex flex-col flex-1">
+        {/* Top Header */}
+        <Header onOpenMobileMenu={() => setMobileMenuOpen(true)} />
+
+        {/* Dashboard Body */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl w-full mx-auto">
+          {/* Hero Banner */}
+          <DashboardHero onNewReviewClick={handleNewReviewClick} />
+
+          {/* Metric Overview Cards */}
+          <MetricCards />
+
+          {/* Grid Layout for Reviews and Findings */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <RecentReviews />
+              <QuickCodeReview />
+            </div>
+            <div className="lg:col-span-1">
+              <LatestFindings />
+            </div>
+          </div>
+        </main>
+
+        {/* Minimal Footer */}
+        <footer className="border-t border-[#1e2638] py-4 px-6 text-center text-xs text-zinc-500 mt-auto">
+          CodeSentinel Platform • Phase 4B Dashboard Scaffolding • Secured with AI & Semgrep Static Engine
+        </footer>
       </div>
-    </main>
+    </div>
   );
 }
