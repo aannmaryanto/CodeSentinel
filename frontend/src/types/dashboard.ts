@@ -2,7 +2,11 @@ export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
 export type ReviewStatus = 'critical' | 'warnings' | 'passed';
 
-export type SupportedLanguage = 'typescript' | 'javascript' | 'python' | 'java' | 'go';
+export type SupportedLanguage = 'typescript' | 'javascript' | 'python' | 'java' | 'cpp' | 'go';
+
+export type NavTab = 'dashboard' | 'reviews' | 'repos' | 'settings';
+
+export type DismissReason = 'false_positive' | 'acceptable_risk' | 'wont_fix' | 'duplicate' | 'other';
 
 export interface MetricCardData {
   id: string;
@@ -25,6 +29,7 @@ export interface ReviewItem {
   issueCount: number;
   timestamp: string;
   commitSha: string;
+  description?: string;
 }
 
 export interface SecurityFinding {
@@ -38,14 +43,50 @@ export interface SecurityFinding {
   impact: string;
   evidence: string;
   suggestedFix?: string;
+  status?: 'open' | 'dismissed' | 'resolved' | 'accepted';
+  dismissReason?: DismissReason;
 }
 
-export interface QuickAnalysisResult {
-  analyzedAt: string;
+export interface ReviewRequest {
+  code: string;
   language: SupportedLanguage;
-  totalFindings: number;
+  repositoryName?: string;
+  filename?: string;
+}
+
+export interface ReviewSummary {
+  overallScore: number;
+  totalIssues: number;
   criticalCount: number;
   highCount: number;
   mediumCount: number;
+  lowCount: number;
+  infoCount: number;
+  passedRulesCount: number;
+}
+
+export interface ReviewResult {
+  id: string;
+  analyzedAt: string;
+  language: SupportedLanguage;
+  summary: ReviewSummary;
   findings: SecurityFinding[];
+}
+
+export interface RepositoryItem {
+  id: string;
+  name: string;
+  fullName: string;
+  defaultBranch: string;
+  isPrivate: boolean;
+  lastScan: string;
+  openPRs: number;
+  healthScore: number;
+  status: 'active' | 'syncing' | 'paused';
+}
+
+export interface ToastNotification {
+  id: string;
+  type: 'success' | 'info' | 'warning';
+  message: string;
 }
