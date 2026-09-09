@@ -254,14 +254,17 @@ erDiagram
 ## 4. Entity Schema Specifications
 
 ### 4.1 `users`
-Stores user profile information obtained via GitHub OAuth SSO. Passwords are **not** stored because authentication is fully delegated to GitHub.
+Stores user profile and authentication information for local and GitHub OAuth users.
 
 - **Primary Key**: `id UUID DEFAULT gen_random_uuid()`
 - **Columns**:
   - `id`: `UUID` | `NOT NULL` | `PRIMARY KEY`
-  - `github_user_id`: `BIGINT` | `NOT NULL` | `UNIQUE` (GitHub user numeric ID)
-  - `github_handle`: `VARCHAR(255)` | `NOT NULL` (GitHub username/login)
+  - `name`: `VARCHAR(255)` | `NULLABLE`
   - `email`: `VARCHAR(255)` | `NOT NULL` | `UNIQUE`
+  - `hashed_password`: `VARCHAR(255)` | `NULLABLE` (Hashed password for local email/password authentication)
+  - `role`: `VARCHAR(50)` | `NOT NULL` | `DEFAULT 'developer'` (Role e.g. `admin`, `developer`, `user`)
+  - `github_user_id`: `BIGINT` | `NULLABLE` | `UNIQUE` (GitHub user numeric ID)
+  - `github_handle`: `VARCHAR(255)` | `NULLABLE` (GitHub username/login)
   - `display_name`: `VARCHAR(255)` | `NULLABLE`
   - `avatar_url`: `TEXT` | `NULLABLE`
   - `is_active`: `BOOLEAN` | `NOT NULL` | `DEFAULT true`
@@ -270,6 +273,7 @@ Stores user profile information obtained via GitHub OAuth SSO. Passwords are **n
 - **Indexes**:
   - `idx_users_github_user_id` (`github_user_id`) UNIQUE
   - `idx_users_email` (`email`) UNIQUE
+  - `idx_users_role` (`role`)
 - **Security Rule**: Tokens (GitHub OAuth access tokens) are stored encrypted in worker sessions or separate transient Redis tokens, **never** in plain text in `users`.
 
 ---
@@ -543,6 +547,72 @@ Immutably records security-sensitive actions across organizations.
   - `ip_address`: `VARCHAR(45)` | `NULLABLE`
   - `created_at`: `TIMESTAMPTZ` | `NOT NULL` | `DEFAULT NOW()`
 - **Data Retention Safeguard**: Foreign keys `organization_id` and `actor_id` specify `ON DELETE SET NULL` so that audit records are **never** accidentally purged if a user or organization is deleted.
+
+---
+
+### 4.14 `projects`
+Stores project records owned by application users.
+
+- **Primary Key**: `id UUID DEFAULT gen_random_uuid()`
+- **Columns**:
+  - `id`: `UUID` | `NOT NULL` | `PRIMARY KEY`
+  - `name`: `VARCHAR(255)` | `NOT NULL`
+  - `description`: `TEXT` | `NULLABLE`
+  - `repository_url`: `VARCHAR(500)` | `NULLABLE`
+  - `owner_id`: `UUID` | `NOT NULL` | `FK -> users(id) ON DELETE CASCADE`
+  - `created_at`: `TIMESTAMPTZ` | `NOT NULL` | `DEFAULT NOW()`
+  - `updated_at`: `TIMESTAMPTZ` | `NOT NULL` | `DEFAULT NOW()`
+- **Indexes**:
+  - `idx_projects_owner_id` (`owner_id`)
+  - `idx_projects_name` (`name`)
+
+---
+
+### 4.15 `scans`
+Stores code analysis/review scan jobs associated with projects.
+
+- **Primary Key**: `id UUID DEFAULT gen_random_uuid()`
+- **Columns**:
+  - `id`: `UUID` | `NOT NULL` | `PRIMARY KEY`
+  - `project_id`: `UUID` | `NOT NULL` | `FK -> projects(id) ON DELETE CASCADE`
+  - `status`: `VARCHAR(50)` | `NOT NULL` | `DEFAULT 'pending'` | `CHECK (status IN ('pending', 'running', 'completed', 'failed'))`
+  - `commit_sha`: `VARCHAR(40)` | `NULLABLE`
+  - `branch`: `VARCHAR(100)` | `NULLABLE`
+  - `error_message`: `TEXT` | `NULLABLE`
+  - `started_at`: `TIMESTAMPTZ` | `NULLABLE`
+  - `completed_at`: `TIMESTAMPTZ` | `NULLABLE`
+  - `created_at`: `TIMESTAMPTZ` | `NOT NULL` | `DEFAULT NOW()`
+  - `updated_at`: `TIMESTAMPTZ` | `NOT NULL` | `DEFAULT NOW()`
+- **Indexes**:
+  - `idx_scans_project_id` (`project_id`)
+  - `idx_scans_status` (`status`)
+
+---
+
+### 4.16 `findings`
+Stores individual static analysis and AI code review findings produced during a scan.
+
+- **Primary Key**: `id UUID DEFAULT gen_random_uuid()`
+- **Columns**:
+  - `id`: `UUID` | `NOT NULL` | `PRIMARY KEY`
+  - `scan_id`: `UUID` | `NOT NULL` | `FK -> scans(id) ON DELETE CASCADE`
+  - `project_id`: `UUID` | `NOT NULL` | `FK -> projects(id) ON DELETE CASCADE`
+  - `rule_id`: `VARCHAR(100)` | `NOT NULL`
+  - `title`: `VARCHAR(255)` | `NOT NULL`
+  - `description`: `TEXT` | `NOT NULL`
+  - `severity`: `VARCHAR(50)` | `NOT NULL` | `CHECK (severity IN ('critical', 'high', 'medium', 'low', 'info'))`
+  - `category`: `VARCHAR(100)` | `NOT NULL`
+  - `file_path`: `VARCHAR(1000)` | `NOT NULL`
+  - `line_number`: `INTEGER` | `NOT NULL`
+  - `code_snippet`: `TEXT` | `NULLABLE`
+  - `recommendation`: `TEXT` | `NULLABLE`
+  - `created_at`: `TIMESTAMPTZ` | `NOT NULL` | `DEFAULT NOW()`
+  - `updated_at`: `TIMESTAMPTZ` | `NOT NULL` | `DEFAULT NOW()`
+- **Indexes**:
+  - `idx_findings_scan_id` (`scan_id`)
+  - `idx_findings_project_id` (`project_id`)
+  - `idx_findings_severity` (`severity`)
+  - `idx_findings_rule_id` (`rule_id`)
 
 ---
 

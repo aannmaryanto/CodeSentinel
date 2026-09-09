@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, Any, Dict
-from sqlalchemy import String, DateTime, ForeignKey, func, Index
+from sqlalchemy import String, DateTime, ForeignKey, func, Index, JSON
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
@@ -40,7 +40,7 @@ class AuditLog(Base):
     )
     metadata_json: Mapped[Dict[str, Any]] = mapped_column(
         "metadata",
-        JSONB,
+        JSONB().with_variant(JSON, "sqlite"),
         server_default="{}",
         nullable=False,
     )

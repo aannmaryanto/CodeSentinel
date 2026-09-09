@@ -7,6 +7,10 @@ from app.models.pull_requests import PullRequest, PullRequestFile
 from app.models.reviews import ReviewJob, Review, ReviewFinding, ReviewComment
 from app.models.ai_usage import AIUsage
 from app.models.audit_logs import AuditLog
+from app.models.projects import Project
+from app.models.scans import Scan
+from app.models.findings import Finding
+from app.models.sources import ProjectSource
 
 __all__ = [
     "Base",
@@ -23,4 +27,8 @@ __all__ = [
     "ReviewComment",
     "AIUsage",
     "AuditLog",
+    "Project",
+    "Scan",
+    "Finding",
+    "ProjectSource",
 ]

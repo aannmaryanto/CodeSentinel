@@ -1,10 +1,13 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, TYPE_CHECKING
 from sqlalchemy import String, BigInteger, Boolean, DateTime, func, Index
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.projects import Project
 
 
 class User(Base):
@@ -16,21 +19,34 @@ class User(Base):
         default=uuid.uuid4,
         index=True,
     )
-    github_user_id: Mapped[int] = mapped_column(
-        BigInteger,
-        unique=True,
-        nullable=False,
-        index=True,
-    )
-    github_handle: Mapped[str] = mapped_column(
+    name: Mapped[Optional[str]] = mapped_column(
         String(255),
-        nullable=False,
+        nullable=True,
     )
     email: Mapped[str] = mapped_column(
         String(255),
         unique=True,
         nullable=False,
         index=True,
+    )
+    hashed_password: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    role: Mapped[str] = mapped_column(
+        String(50),
+        default="developer",
+        nullable=False,
+    )
+    github_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        unique=True,
+        nullable=True,
+        index=True,
+    )
+    github_handle: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
     )
     display_name: Mapped[Optional[str]] = mapped_column(
         String(255),
@@ -57,7 +73,16 @@ class User(Base):
         nullable=False,
     )
 
+    # Relationships
+    projects: Mapped[List["Project"]] = relationship(
+        "Project",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
+
     __table_args__ = (
         Index("idx_users_github_user_id", "github_user_id", unique=True),
         Index("idx_users_email", "email", unique=True),
+        Index("idx_users_role", "role"),
     )
+
