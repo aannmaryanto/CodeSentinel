@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-1.5-flash"
 
     SECRET_KEY: str = "dev_secret_key_change_in_production_32_bytes_min"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+
+    UPLOAD_STORAGE_DIR: str = "storage/sources"
+    MAX_UPLOAD_SIZE_BYTES: int = 26214400
+    MAX_UNCOMPRESSED_SIZE_BYTES: int = 104857600
+    MAX_SOURCE_FILES_COUNT: int = 5000
 
     model_config = SettingsConfigDict(
         env_file=".env",
