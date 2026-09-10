@@ -77,12 +77,17 @@ export interface RepositoryItem {
   id: string;
   name: string;
   fullName: string;
+  owner: string;
+  language: SupportedLanguage;
   defaultBranch: string;
   isPrivate: boolean;
   lastScan: string;
+  updatedAt: string;
   openPRs: number;
   healthScore: number;
+  vulnerabilityCount: number;
   status: 'active' | 'syncing' | 'paused';
+  description?: string;
 }
 
 export interface ToastNotification {

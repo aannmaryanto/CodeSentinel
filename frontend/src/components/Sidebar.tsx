@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { NavTab } from '../types/dashboard';
 import {
   ShieldIcon,
@@ -20,6 +21,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ mobileOpen, setMobileOpen, activeTab, onSelectTab }: SidebarProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const navItems: { name: string; id: NavTab; icon: React.FC<{ className?: string }> }[] = [
     { name: 'Dashboard', id: 'dashboard', icon: DashboardIcon },
     { name: 'Reviews', id: 'reviews', icon: ReviewIcon },
@@ -28,9 +32,24 @@ export function Sidebar({ mobileOpen, setMobileOpen, activeTab, onSelectTab }: S
   ];
 
   const handleTabClick = (tabId: NavTab) => {
-    onSelectTab(tabId);
     setMobileOpen(false);
+
+    if (tabId === 'repos') {
+      if (pathname !== '/repositories') {
+        router.push('/repositories');
+      }
+      return;
+    }
+
+    if (pathname !== '/') {
+      router.push('/');
+      setTimeout(() => onSelectTab(tabId), 100);
+    } else {
+      onSelectTab(tabId);
+    }
   };
+
+  const isReposRoute = pathname === '/repositories';
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-[#0b0f19] border-r border-[#1e2638] text-zinc-300">
@@ -65,7 +84,10 @@ export function Sidebar({ mobileOpen, setMobileOpen, activeTab, onSelectTab }: S
         </div>
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.id;
+          const isActive = isReposRoute
+            ? item.id === 'repos'
+            : activeTab === item.id;
+
           return (
             <button
               key={item.id}
@@ -126,3 +148,4 @@ export function Sidebar({ mobileOpen, setMobileOpen, activeTab, onSelectTab }: S
     </>
   );
 }
+
