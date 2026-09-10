@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { NavTab } from '../types/dashboard';
 import {
   ShieldIcon,
@@ -8,6 +9,7 @@ import {
   ReviewIcon,
   RepoIcon,
   SettingsIcon,
+  CodeIcon,
   GitHubIcon,
   CloseIcon,
 } from './Icons';
@@ -20,6 +22,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ mobileOpen, setMobileOpen, activeTab, onSelectTab }: SidebarProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const navItems: { name: string; id: NavTab; icon: React.FC<{ className?: string }> }[] = [
     { name: 'Dashboard', id: 'dashboard', icon: DashboardIcon },
     { name: 'Reviews', id: 'reviews', icon: ReviewIcon },
@@ -28,9 +33,23 @@ export function Sidebar({ mobileOpen, setMobileOpen, activeTab, onSelectTab }: S
   ];
 
   const handleTabClick = (tabId: NavTab) => {
-    onSelectTab(tabId);
     setMobileOpen(false);
+    if (pathname !== '/') {
+      router.push('/');
+      setTimeout(() => onSelectTab(tabId), 100);
+    } else {
+      onSelectTab(tabId);
+    }
   };
+
+  const handleLiveReviewClick = () => {
+    setMobileOpen(false);
+    if (pathname !== '/review') {
+      router.push('/review');
+    }
+  };
+
+  const isLiveReviewActive = pathname === '/review';
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-[#0b0f19] border-r border-[#1e2638] text-zinc-300">
@@ -65,7 +84,7 @@ export function Sidebar({ mobileOpen, setMobileOpen, activeTab, onSelectTab }: S
         </div>
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.id;
+          const isActive = !isLiveReviewActive && activeTab === item.id;
           return (
             <button
               key={item.id}
@@ -81,6 +100,22 @@ export function Sidebar({ mobileOpen, setMobileOpen, activeTab, onSelectTab }: S
             </button>
           );
         })}
+
+        <div className="pt-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          AI Tools
+        </div>
+
+        <button
+          onClick={handleLiveReviewClick}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${
+            isLiveReviewActive
+              ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30 font-semibold shadow-sm'
+              : 'text-zinc-400 hover:text-zinc-100 hover:bg-[#151c2c]'
+          }`}
+        >
+          <CodeIcon className={`w-5 h-5 ${isLiveReviewActive ? 'text-blue-400' : 'text-zinc-400'}`} />
+          <span>Code Review Page</span>
+        </button>
       </nav>
 
       {/* Bottom Section: GitHub Status */}
@@ -126,3 +161,4 @@ export function Sidebar({ mobileOpen, setMobileOpen, activeTab, onSelectTab }: S
     </>
   );
 }
+
