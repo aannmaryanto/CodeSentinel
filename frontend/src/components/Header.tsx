@@ -3,6 +3,7 @@
 import React from 'react';
 import { NavTab } from '../types/dashboard';
 import { MenuIcon, ExternalLinkIcon } from './Icons';
+import { useAuth } from '@/context/AuthContext';
 
 interface HeaderProps {
   onOpenMobileMenu: () => void;
@@ -11,6 +12,8 @@ interface HeaderProps {
 }
 
 export function Header({ onOpenMobileMenu, activeTab, onShowToast }: HeaderProps) {
+  const { user, logout } = useAuth();
+
   const getTitle = () => {
     switch (activeTab) {
       case 'reviews':
@@ -23,6 +26,28 @@ export function Header({ onOpenMobileMenu, activeTab, onShowToast }: HeaderProps
         return 'CodeSentinel Dashboard';
     }
   };
+
+  const getInitials = (name?: string | null, email?: string) => {
+    if (name && name.trim()) {
+      const parts = name.trim().split(' ');
+      if (parts.length >= 2) {
+        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+      }
+      return name.substring(0, 2).toUpperCase();
+    }
+    if (email) {
+      return email.substring(0, 2).toUpperCase();
+    }
+    return 'CS';
+  };
+
+  const handleLogout = () => {
+    logout();
+    onShowToast('Logged out successfully', 'info');
+  };
+
+  const displayName = user?.name || user?.email?.split('@')[0] || 'Developer';
+  const roleDisplay = user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Developer';
 
   return (
     <header className="sticky top-0 z-20 h-16 bg-[#080b12]/90 backdrop-blur-md border-b border-[#1e2638] px-4 lg:px-8 flex items-center justify-between">
@@ -59,21 +84,28 @@ export function Header({ onOpenMobileMenu, activeTab, onShowToast }: HeaderProps
           <ExternalLinkIcon className="w-3.5 h-3.5 text-zinc-400" />
         </a>
 
-        {/* User Profile Avatar */}
-        <button
-          onClick={() => onShowToast('Logged in as Ann Mary (Security Lead)', 'info')}
-          className="flex items-center gap-2 pl-2 border-l border-[#1e2638] focus:outline-none"
-          title="Account Settings"
-        >
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-bold text-xs flex items-center justify-center border border-blue-400/30 shadow-inner">
-            AM
+        {/* User Profile Avatar & Logout */}
+        <div className="flex items-center gap-3 pl-2 border-l border-[#1e2638]">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-bold text-xs flex items-center justify-center border border-blue-400/30 shadow-inner">
+              {getInitials(user?.name, user?.email)}
+            </div>
+            <div className="hidden md:block text-left">
+              <div className="text-xs font-medium text-zinc-200">{displayName}</div>
+              <div className="text-[10px] text-zinc-500">{roleDisplay}</div>
+            </div>
           </div>
-          <div className="hidden md:block text-left">
-            <div className="text-xs font-medium text-zinc-200">Ann Mary</div>
-            <div className="text-[10px] text-zinc-500">Security Lead</div>
-          </div>
-        </button>
+
+          <button
+            onClick={handleLogout}
+            className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 transition-colors"
+            title="Log out of account"
+          >
+            Logout
+          </button>
+        </div>
       </div>
     </header>
   );
 }
+
