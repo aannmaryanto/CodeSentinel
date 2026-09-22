@@ -1,0 +1,129 @@
+services:
+  # ----------------------------------------------------------------------------
+  # PostgreSQL Database Service
+  # ----------------------------------------------------------------------------
+  db:
+    image: postgres:15-alpine
+    container_name: codesentinel-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: codesentinel_dev
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d codesentinel_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # Redis Cache & Background Task Queue Broker
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: codesentinel-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # CodeSentinel Core API Backend (FastAPI / Python)
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    container_name: codesentinel-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: CodeSentinel
+      APP_ENV: development
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      CORS_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
+      DATABASE_URL: postgresql+asyncpg://sentinel:secret@db:5432/codesentinel_dev
+      DATABASE_SYNC_URL: postgresql+psycopg2://sentinel:secret@db:5432/codesentinel_dev
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-dev_secret_key_change_in_production_32_bytes_min}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ----------------------------------------------------------------------------
+  # CodeSentinel Web Dashboard Frontend (Next.js / TypeScript)
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend
+    container_name: codesentinel-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+      - /app/frontend/.next
+    depends_on:
+      backend:
+        condition: service_started
+    command: npm run dev
+
+  # ----------------------------------------------------------------------------
+  # Celery Background Worker Service (Phase 7+ Async Processing)
+  # Uncomment when Celery task module is initialized in app.core.worker
+  # ----------------------------------------------------------------------------
+  # celery_worker:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: backend
+  #   container_name: codesentinel-celery
+  #   restart: unless-stopped
+  #   environment:
+  #     DATABASE_URL: postgresql+asyncpg://sentinel:secret@db:5432/codesentinel_dev
+  #     REDIS_URL: redis://redis:6379/0
+  #     GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #     db:
+  #       condition: service_healthy
+  #   command: celery -A app.core.celery worker --loglevel=info
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

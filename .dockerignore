@@ -1,0 +1,58 @@
+# ==============================================================================
+# CodeSentinel Docker Ignore Manifest
+# Prevents unnecessary files, secrets, and transient data from entering Docker contexts
+# ==============================================================================
+
+# Version control & Git metadata
+.git
+.gitignore
+.github
+
+# Environment & Secret Files (CRITICAL SECURITY RULE)
+**/.env
+**/.env.*
+!**/.env.example
+!**/backend/.env.example
+!**/frontend/.env.example
+
+# Node.js / Frontend dependencies & build artifacts
+**/node_modules
+**/.next
+**/out
+**/build
+**/dist
+
+# Python / Backend virtual environments & compiled caches
+**/venv
+**/.venv
+**/env
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Test & Coverage reports
+**/.pytest_cache
+**/.coverage
+**/htmlcov
+**/.coverage.*
+**/coverage
+
+# Temporary files & storage uploads
+storage/sources/*
+!storage/sources/.gitkeep
+tmp/
+temp/
+*.log
+
+# IDE & OS configuration
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Documentation & Docker files
+Dockerfile*
+docker-compose*.yml
+README.md
+AGENTS.md
