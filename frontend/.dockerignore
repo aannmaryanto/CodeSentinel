@@ -1,0 +1,38 @@
+# ==============================================================================
+# CodeSentinel Frontend Docker Ignore Manifest
+# Build context: ./frontend
+# ==============================================================================
+
+# Node.js & Next.js Build Artifacts / Dependencies
+node_modules/
+.next/
+out/
+build/
+dist/
+.npm
+.yarn/
+.pnpm-store
+
+# Environment Files & Secrets
+.env
+.env.*
+!.env.example
+
+# Storage & Temporary Files
+tmp/
+temp/
+*.log
+
+# IDE & OS Generated Files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Docker & Meta Files
+Dockerfile*
+docker-compose*.yml
+README.md
+AGENTS.md

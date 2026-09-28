@@ -5,7 +5,8 @@ import {
   TokenResponse,
 } from '@/types/auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Use relative paths in the browser client to route through Next.js server API proxy
+const API_URL = typeof window !== 'undefined' ? '' : (process.env.API_URL || '');
 const TOKEN_KEY = 'codesentinel_token';
 const USER_KEY = 'codesentinel_user';
 
@@ -62,16 +63,17 @@ export const authService = {
       body: JSON.stringify(credentials),
     });
 
-    const data = await response.json();
+    const data = await parseResponseBody(response);
 
     if (!response.ok) {
       const errorMessage =
-        data.detail || data.error || 'Failed to sign in. Please check your credentials.';
+        data.detail || data.error || `Failed to sign in (HTTP ${response.status}). Please check your credentials.`;
       throw new Error(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
     }
 
-    this.setAuth(data.access_token, data.user);
-    return data as TokenResponse;
+    const tokenResponse = data as unknown as TokenResponse;
+    this.setAuth(tokenResponse.access_token, tokenResponse.user);
+    return tokenResponse;
   },
 
   // Registration request
@@ -84,16 +86,17 @@ export const authService = {
       body: JSON.stringify(userData),
     });
 
-    const data = await response.json();
+    const data = await parseResponseBody(response);
 
     if (!response.ok) {
       const errorMessage =
-        data.detail || data.error || 'Registration failed. Please try again.';
+        data.detail || data.error || `Registration failed (HTTP ${response.status}). Please try again.`;
       throw new Error(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
     }
 
-    this.setAuth(data.access_token, data.user);
-    return data as TokenResponse;
+    const tokenResponse = data as unknown as TokenResponse;
+    this.setAuth(tokenResponse.access_token, tokenResponse.user);
+    return tokenResponse;
   },
 
   // Get current user profile using JWT token
@@ -105,16 +108,31 @@ export const authService = {
       },
     });
 
-    const data = await response.json();
+    const data = await parseResponseBody(response);
 
     if (!response.ok) {
-      throw new Error(data.detail || 'Session expired. Please log in again.');
+      const errorMessage =
+        data.detail || data.error || `Session expired (HTTP ${response.status}). Please log in again.`;
+      throw new Error(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
     }
 
     if (typeof window !== 'undefined') {
       localStorage.setItem(USER_KEY, JSON.stringify(data));
     }
 
-    return data as User;
+    return data as unknown as User;
   },
 };
+
+async function parseResponseBody(response: Response): Promise<Record<string, unknown>> {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    if (!response.ok) {
+      throw new Error(`Server returned HTTP ${response.status}: ${text.slice(0, 150)}`);
+    }
+    throw new Error(`Invalid JSON response from server (HTTP ${response.status})`);
+  }
+}

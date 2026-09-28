@@ -1,0 +1,11 @@
+# ==============================================================================
+# CodeSentinel Kubernetes Namespace Manifest
+# Defines the isolated namespace for all CodeSentinel microservices and components
+# ==============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: codesentinel
+  labels:
+    app.kubernetes.io/name: codesentinel
+    app.kubernetes.io/part-of: codesentinel

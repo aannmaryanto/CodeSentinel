@@ -42,9 +42,8 @@ services:
   # ----------------------------------------------------------------------------
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
-      target: backend
     container_name: codesentinel-backend
     restart: unless-stopped
     ports:
@@ -80,15 +79,14 @@ services:
   # ----------------------------------------------------------------------------
   frontend:
     build:
-      context: .
+      context: ./frontend
       dockerfile: Dockerfile
-      target: frontend
     container_name: codesentinel-frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      API_URL: http://backend:8000
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
     volumes:
@@ -106,9 +104,8 @@ services:
   # ----------------------------------------------------------------------------
   # celery_worker:
   #   build:
-  #     context: .
+  #     context: ./backend
   #     dockerfile: Dockerfile
-  #     target: backend
   #   container_name: codesentinel-celery
   #   restart: unless-stopped
   #   environment:

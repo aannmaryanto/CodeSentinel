@@ -1,0 +1,46 @@
+# ==============================================================================
+# CodeSentinel Backend Docker Ignore Manifest
+# Build context: ./backend
+# ==============================================================================
+
+# Python & Pytest Caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Environment Files & Secrets
+.env
+.env.*
+!.env.example
+
+# Python Virtual Environments
+venv/
+.venv/
+env/
+
+# Storage & Temporary Files
+storage/sources/*
+!storage/sources/.gitkeep
+tmp/
+temp/
+*.log
+*.sqlite3
+
+# IDE & OS Generated Files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Docker & Meta Files
+Dockerfile*
+docker-compose*.yml
+README.md
+AGENTS.md

@@ -1,57 +1,76 @@
 # ==============================================================================
 # CodeSentinel Docker Ignore Manifest
-# Prevents unnecessary files, secrets, and transient data from entering Docker contexts
+# Prevents unnecessary files, secrets, build artifacts, and caches from entering Docker contexts
 # ==============================================================================
 
-# Version control & Git metadata
+# Version Control & Git
+.git/
 .git
 .gitignore
 .github
 
-# Environment & Secret Files (CRITICAL SECURITY RULE)
+# Environment Files & Secrets
+.env
+.env.*
+!.env.example
 **/.env
 **/.env.*
 !**/.env.example
-!**/backend/.env.example
-!**/frontend/.env.example
 
-# Node.js / Frontend dependencies & build artifacts
-**/node_modules
-**/.next
-**/out
-**/build
-**/dist
-
-# Python / Backend virtual environments & compiled caches
-**/venv
-**/.venv
-**/env
-**/__pycache__
-**/*.pyc
-**/*.pyo
-**/*.pyd
-
-# Test & Coverage reports
+# Python & Pytest Caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+backend/.pytest_cache
 **/.pytest_cache
-**/.coverage
-**/htmlcov
-**/.coverage.*
+.mypy_cache/
+**/.mypy_cache/
+.ruff_cache/
+**/.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 **/coverage
 
-# Temporary files & storage uploads
+# Python Virtual Environments
+venv/
+.venv/
+env/
+**/venv
+**/.venv
+
+# Node.js & Next.js Build Artifacts / Dependencies
+node_modules/
+frontend/node_modules/
+**/node_modules/
+.next/
+frontend/.next/
+**/.next/
+out/
+build/
+dist/
+.npm
+.yarn/
+.pnpm-store
+
+# Storage & Temporary Files
 storage/sources/*
 !storage/sources/.gitkeep
 tmp/
 temp/
 *.log
+*.sqlite3
 
-# IDE & OS configuration
+# IDE & OS Generated Files
 .vscode/
 .idea/
+*.swp
+*.swo
 .DS_Store
 Thumbs.db
 
-# Documentation & Docker files
+# Documentation & Development Files
 Dockerfile*
 docker-compose*.yml
 README.md

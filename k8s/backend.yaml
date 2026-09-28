@@ -1,0 +1,95 @@
+# ==============================================================================
+# CodeSentinel Core API Backend Manifest (FastAPI / Python)
+# Includes Deployment and ClusterIP Service for FastAPI API Server
+# ==============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: codesentinel
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: codesentinel-backend:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: APP_NAME
+              value: "CodeSentinel"
+            - name: APP_ENV
+              value: "development"
+            - name: API_HOST
+              value: "0.0.0.0"
+            - name: API_PORT
+              value: "8000"
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://sentinel:secret@postgres:5432/codesentinel_dev"
+            - name: DATABASE_SYNC_URL
+              value: "postgresql+psycopg2://sentinel:secret@postgres:5432/codesentinel_dev"
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
+            - name: SECRET_KEY
+              value: "dev_secret_key_change_in_production_32_bytes_min"
+            - name: JWT_ALGORITHM
+              value: "HS256"
+            - name: ACCESS_TOKEN_EXPIRE_MINUTES
+              value: "1440"
+            - name: GEMINI_MODEL
+              value: "gemini-1.5-flash"
+            # Secret placeholders - override via Kubernetes Secrets in production
+            - name: GEMINI_API_KEY
+              value: ""
+            - name: GITHUB_APP_ID
+              value: ""
+            - name: GITHUB_PRIVATE_KEY
+              value: ""
+            - name: GITHUB_WEBHOOK_SECRET
+              value: ""
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: codesentinel
+  labels:
+    app: backend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  selector:
+    app: backend
