@@ -50,12 +50,14 @@ class GitHubService:
     def __init__(
         self,
         app_id: Optional[str] = None,
+        client_id: Optional[str] = None,
         private_key: Optional[str] = None,
         base_url: Optional[str] = None,
         timeout: float = 10.0,
     ):
-        self.app_id = app_id or settings.GITHUB_APP_ID
-        self.private_key = private_key or settings.GITHUB_PRIVATE_KEY
+        self.app_id = app_id
+        self.client_id = client_id
+        self.private_key = private_key
         self.base_url = (base_url or self.DEFAULT_BASE_URL).rstrip("/")
         self.timeout = timeout
 
@@ -63,19 +65,30 @@ class GitHubService:
         """
         Generates a signed RS256 JWT for GitHub App authentication.
         Expires in 10 minutes.
+        Uses GITHUB_CLIENT_ID as issuer (iss claim) when present, falling back to GITHUB_APP_ID.
         """
-        if not self.app_id or not self.private_key:
+        private_key_val = self.private_key or settings.GITHUB_PRIVATE_KEY
+        client_id_val = self.client_id if self.client_id is not None else settings.GITHUB_CLIENT_ID
+        app_id_val = self.app_id if self.app_id is not None else settings.GITHUB_APP_ID
+
+        issuer = client_id_val.strip() if client_id_val and client_id_val.strip() else app_id_val.strip()
+
+        if not issuer or not private_key_val:
             raise GitHubAuthenticationError(
-                "GitHub App ID and Private Key must be configured to generate an App JWT."
+                "GitHub Client ID / App ID and Private Key must be configured to generate an App JWT."
             )
 
-        formatted_key = self.private_key.replace("\\n", "\n").strip()
+        formatted_key = private_key_val.replace("\\n", "\n").strip()
         now = int(time.time())
 
+        # GitHub App JWT spec requires (exp - iat) <= 600 seconds (10 minutes max)
+        iat = now - 30
+        exp = iat + 600
+
         payload = {
-            "iat": now - 60,
-            "exp": now + 600,
-            "iss": str(self.app_id),
+            "iat": iat,
+            "exp": exp,
+            "iss": str(issuer),
         }
 
         try:
@@ -164,6 +177,20 @@ class GitHubService:
         else:
             raise GitHubAPIError(message, status_code=status)
 
+    async def get_repository_installation(
+        self,
+        owner: str,
+        repo: str,
+        client: Optional[httpx.AsyncClient] = None,
+    ) -> dict[str, Any]:
+        """
+        Retrieves the GitHub App installation metadata for a specific repository using App JWT authentication.
+        GET /repos/{owner}/{repo}/installation
+        """
+        jwt_token = self.generate_app_jwt()
+        endpoint = f"/repos/{owner}/{repo}/installation"
+        return await self._request("GET", endpoint, token=jwt_token, client=client)
+
     async def get_installation_access_token(
         self,
         installation_id: int,
@@ -249,3 +276,42 @@ class GitHubService:
         endpoint = f"/repos/{owner}/{repo}/pulls/{pull_number}/files"
         params = {"page": page, "per_page": per_page}
         return await self._request("GET", endpoint, token=installation_token, params=params, client=client)
+
+    async def download_repository_archive(
+        self,
+        installation_token: str,
+        owner: str,
+        repo: str,
+        ref: Optional[str] = None,
+        client: Optional[httpx.AsyncClient] = None,
+    ) -> bytes:
+        """
+        Downloads the repository ZIP archive for a specified ref (branch/commit/tag) or default branch.
+        GET /repos/{owner}/{repo}/zipball/{ref}
+        """
+        endpoint = f"/repos/{owner}/{repo}/zipball/{ref}" if ref else f"/repos/{owner}/{repo}/zipball"
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {installation_token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        url = f"{self.base_url}{endpoint}"
+
+        close_client = False
+        if client is None:
+            client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
+            close_client = True
+
+        try:
+            response = await client.get(url, headers=headers)
+            if not response.is_success:
+                self._handle_response(response, method="GET", endpoint=endpoint)
+            return response.content
+        except httpx.TimeoutException as exc:
+            raise GitHubAPIError(f"GitHub API archive download timed out: GET {endpoint}") from exc
+        except httpx.RequestError as exc:
+            raise GitHubAPIError(f"GitHub API network request failed: GET {endpoint}") from exc
+        finally:
+            if close_client:
+                await client.aclose()
+

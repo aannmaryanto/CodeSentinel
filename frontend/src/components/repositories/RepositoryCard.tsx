@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
 import { RepositoryItem } from '@/types/dashboard';
 import { GitHubIcon, ShieldIcon, ExternalLinkIcon } from '../Icons';
 
@@ -9,17 +8,12 @@ interface RepositoryCardProps {
   repo: RepositoryItem;
   onViewDetails: (repo: RepositoryItem) => void;
   onSyncRepo: (repoId: string, name: string) => void;
+  onScanRepo: (repoId: string, name: string) => void;
 }
 
-export function RepositoryCard({ repo, onViewDetails, onSyncRepo }: RepositoryCardProps) {
-  const router = RouterHook();
-
-  function RouterHook() {
-    return useRouter();
-  }
-
+export function RepositoryCard({ repo, onViewDetails, onSyncRepo, onScanRepo }: RepositoryCardProps) {
   const handleScanCode = () => {
-    router.push(`/review?repo=${encodeURIComponent(repo.fullName)}&lang=${repo.language}`);
+    onScanRepo(repo.id, repo.fullName);
   };
 
   const getLanguageColor = (lang: string) => {

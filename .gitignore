@@ -82,3 +82,5 @@ Thumbs.db
 
 # Generated source storage
 backend/storage/sources/
+
+storage/sources/

@@ -1,5 +1,10 @@
+import io
+import os
+import tempfile
 import uuid
+import zipfile
 import zlib
+from datetime import datetime, timezone
 from typing import Optional, List
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,8 +14,12 @@ from app.models.users import User
 from app.models.organizations import Organization, OrganizationMember
 from app.models.github import GitHubInstallation
 from app.models.repositories import Repository
+from app.models.projects import Project
 from app.schemas.repositories import RepositoryConnectRequest
-from app.services.github_service import GitHubService, GitHubException
+from app.services.github_service import GitHubService, GitHubException, GitHubNotFoundError
+from app.services import scanner_service
+from app.services.scanner.engine import is_safe_workspace_path
+
 
 
 class RepositoryServiceError(Exception):
@@ -79,9 +88,11 @@ async def get_or_create_installation(
     db: AsyncSession,
     organization_id: uuid.UUID,
     github_installation_id: Optional[int] = None,
+    target_type: str = "User",
+    target_name: str = "default",
 ) -> GitHubInstallation:
     """
-    Retrieves an existing GitHubInstallation for the organization or creates a default record.
+    Retrieves an existing active GitHubInstallation for the organization or creates a record with a real installation ID.
     """
     if github_installation_id:
         stmt = select(GitHubInstallation).where(
@@ -90,21 +101,34 @@ async def get_or_create_installation(
         result = await db.execute(stmt)
         installation = result.scalar_one_or_none()
         if installation:
+            if installation.status != "active":
+                raise RepositoryServiceError(
+                    f"GitHub Installation '{github_installation_id}' is not active (status: {installation.status}).",
+                    status_code=400,
+                )
             return installation
 
-    stmt = select(GitHubInstallation).where(GitHubInstallation.organization_id == organization_id)
+    stmt = select(GitHubInstallation).where(
+        GitHubInstallation.organization_id == organization_id,
+        GitHubInstallation.status == "active",
+    )
     result = await db.execute(stmt)
     installation = result.scalars().first()
 
     if installation:
         return installation
 
-    inst_id = github_installation_id or (int(organization_id.int % 9000000) + 100000)
+    if not github_installation_id:
+        raise RepositoryServiceError(
+            "A valid GitHub App installation ID is required to connect a repository.",
+            status_code=400,
+        )
+
     new_inst = GitHubInstallation(
         organization_id=organization_id,
-        github_installation_id=inst_id,
-        target_type="User",
-        target_name="default",
+        github_installation_id=github_installation_id,
+        target_type=target_type,
+        target_name=target_name,
         status="active",
     )
     db.add(new_inst)
@@ -145,7 +169,7 @@ async def connect_repository(
 ) -> Repository:
     """
     Connects a GitHub repository to the user's organization.
-    Checks for duplicates and metadata.
+    Resolves real GitHub App installation and verifies repository metadata.
     """
     raw_full_name = connect_data.full_name.strip()
     if not raw_full_name or "/" not in raw_full_name:
@@ -165,16 +189,49 @@ async def connect_repository(
     if duplicate_res.scalar_one_or_none():
         raise RepositoryAlreadyExistsError(full_name)
 
-    # 2. Get User Organization & Installation
+    # 2. Get User Organization
     org = await get_or_create_user_organization(db, user)
-    installation = await get_or_create_installation(db, org.id, connect_data.installation_id)
 
-    # 3. Retrieve metadata from GitHub if GitHubService is provided
+    # 3. Resolve Real GitHub Installation & Retrieve Metadata
     default_branch = connect_data.default_branch or "main"
     is_private = connect_data.is_private if connect_data.is_private is not None else True
     github_repo_id = zlib.crc32(full_name.encode("utf-8"))
+    resolved_installation_id = connect_data.installation_id
 
     if github_service:
+        # A. Resolve real GitHub App installation for the repository
+        try:
+            gh_inst = await github_service.get_repository_installation(owner_handle, repo_name)
+            resolved_installation_id = gh_inst.get("id") or resolved_installation_id
+            target_type = gh_inst.get("target_type") or "User"
+            target_name = gh_inst.get("account", {}).get("login") or owner_handle
+        except GitHubNotFoundError as exc:
+            raise RepositoryServiceError(
+                f"GitHub App is not installed on repository '{full_name}'. Please install CodeSentinel on your GitHub account or organization first.",
+                status_code=404,
+            ) from exc
+        except GitHubException as exc:
+            raise RepositoryServiceError(
+                f"Failed to resolve GitHub App installation for '{full_name}': {exc.message}",
+                status_code=exc.status_code or 502,
+            ) from exc
+
+        if not resolved_installation_id:
+            raise RepositoryServiceError(
+                f"Could not determine GitHub App installation ID for '{full_name}'.",
+                status_code=400,
+            )
+
+        # B. Get or create GitHubInstallation record in DB using real installation ID
+        installation = await get_or_create_installation(
+            db,
+            org.id,
+            github_installation_id=resolved_installation_id,
+            target_type=target_type,
+            target_name=target_name,
+        )
+
+        # C. Retrieve repository metadata using installation token
         try:
             token_resp = await github_service.get_installation_access_token(
                 installation.github_installation_id
@@ -189,15 +246,19 @@ async def connect_repository(
                 repo_name = gh_repo.get("name", repo_name)
                 full_name = gh_repo.get("full_name", full_name)
         except GitHubException as exc:
-            if exc.status_code == 404:
-                raise RepositoryServiceError(
-                    f"GitHub repository '{full_name}' not found or access unauthorized.",
-                    status_code=404,
-                ) from exc
             raise RepositoryServiceError(
-                f"Failed to verify repository with GitHub: {exc.message}",
+                f"Failed to verify repository metadata with GitHub: {exc.message}",
                 status_code=exc.status_code or 502,
             ) from exc
+    else:
+        if not resolved_installation_id:
+            raise RepositoryServiceError(
+                "A valid GitHub installation ID is required to connect a repository.",
+                status_code=400,
+            )
+        installation = await get_or_create_installation(
+            db, org.id, github_installation_id=resolved_installation_id
+        )
 
     repository = Repository(
         organization_id=org.id,
@@ -263,27 +324,143 @@ async def sync_repository(
         inst_res = await db.execute(inst_stmt)
         installation = inst_res.scalar_one_or_none()
 
-        if installation:
-            try:
-                token_resp = await github_service.get_installation_access_token(
-                    installation.github_installation_id
-                )
-                token = token_resp.get("token", "")
-                gh_repo = await github_service.get_repository(
-                    token, repository.owner_handle, repository.name
-                )
-                if gh_repo:
-                    repository.name = gh_repo.get("name", repository.name)
-                    repository.full_name = gh_repo.get("full_name", repository.full_name)
-                    repository.default_branch = gh_repo.get("default_branch", repository.default_branch)
-                    repository.is_private = gh_repo.get("private", repository.is_private)
-                    repository.is_archived = gh_repo.get("archived", repository.is_archived)
-            except GitHubException as exc:
-                raise RepositoryServiceError(
-                    f"GitHub API sync failed: {exc.message}",
-                    status_code=exc.status_code or 502,
-                ) from exc
+        if not installation or installation.status != "active":
+            status_desc = installation.status if installation else "missing"
+            raise RepositoryServiceError(
+                f"Cannot sync repository. Associated GitHub installation is not active (status: {status_desc}).",
+                status_code=400,
+            )
+
+        try:
+            token_resp = await github_service.get_installation_access_token(
+                installation.github_installation_id
+            )
+            token = token_resp.get("token", "")
+            gh_repo = await github_service.get_repository(
+                token, repository.owner_handle, repository.name
+            )
+            if gh_repo:
+                repository.name = gh_repo.get("name", repository.name)
+                repository.full_name = gh_repo.get("full_name", repository.full_name)
+                repository.default_branch = gh_repo.get("default_branch", repository.default_branch)
+                repository.is_private = gh_repo.get("private", repository.is_private)
+                repository.is_archived = gh_repo.get("archived", repository.is_archived)
+        except GitHubException as exc:
+            raise RepositoryServiceError(
+                f"GitHub API sync failed: {exc.message}",
+                status_code=exc.status_code or 502,
+            ) from exc
 
     await db.commit()
     await db.refresh(repository)
     return repository
+
+
+def safe_extract_zip(zip_bytes: bytes, target_dir: str) -> None:
+    """
+    Safely extracts a ZIP archive into target_dir, checking for path traversal (Zip Slip).
+    """
+    target_dir_abs = os.path.abspath(target_dir)
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        for member in zf.infolist():
+            member_path = os.path.abspath(os.path.join(target_dir_abs, member.filename))
+            if not is_safe_workspace_path(target_dir_abs, member_path):
+                raise RepositoryServiceError(
+                    f"Path traversal detected in repository archive member '{member.filename}'.",
+                    status_code=400,
+                )
+        zf.extractall(target_dir_abs)
+
+
+async def get_or_create_project_for_repository(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    repository: Repository,
+) -> Project:
+    """
+    Retrieves or creates a Project record for the repository owned by the user.
+    """
+    stmt = select(Project).where(
+        Project.owner_id == user_id,
+        Project.name == repository.name,
+    )
+    result = await db.execute(stmt)
+    project = result.scalars().first()
+    if project:
+        return project
+
+    new_project = Project(
+        name=repository.name,
+        description=f"GitHub Repository: {repository.full_name}",
+        repository_url=f"https://github.com/{repository.full_name}",
+        owner_id=user_id,
+    )
+    db.add(new_project)
+    await db.flush()
+    return new_project
+
+
+async def scan_repository(
+    db: AsyncSession,
+    repository_id: uuid.UUID,
+    user_id: uuid.UUID,
+    github_service: Optional[GitHubService] = None,
+) -> Repository:
+    """
+    Triggers a security scan for a connected repository.
+    Downloads source code archive securely from GitHub, safely extracts inside TemporaryDirectory(),
+    runs static analysis scanner, persists scan/finding records, and updates repository metadata.
+    """
+    repository = await get_repository_details(db, repository_id, user_id)
+
+    inst_stmt = select(GitHubInstallation).where(
+        GitHubInstallation.id == repository.github_installation_id
+    )
+    inst_res = await db.execute(inst_stmt)
+    installation = inst_res.scalar_one_or_none()
+
+    if not installation or installation.status != "active":
+        status_desc = installation.status if installation else "missing"
+        raise RepositoryServiceError(
+            f"Cannot scan repository. Associated GitHub installation is not active (status: {status_desc}).",
+            status_code=400,
+        )
+
+    project = await get_or_create_project_for_repository(db, user_id, repository)
+
+    if github_service:
+        try:
+            token_resp = await github_service.get_installation_access_token(
+                installation.github_installation_id
+            )
+            token = token_resp.get("token", "")
+            archive_bytes = await github_service.download_repository_archive(
+                token, repository.owner_handle, repository.name, repository.default_branch
+            )
+        except GitHubException as exc:
+            raise RepositoryServiceError(
+                f"Failed to download repository archive from GitHub: {exc.message}",
+                status_code=exc.status_code or 502,
+            ) from exc
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            safe_extract_zip(archive_bytes, temp_dir)
+
+            # GitHub zipball archives extract as a single top-level folder (owner-repo-commit/)
+            entries = [os.path.join(temp_dir, e) for e in os.listdir(temp_dir)]
+            subdirs = [e for e in entries if os.path.isdir(e)]
+            scan_workspace = subdirs[0] if len(subdirs) == 1 else temp_dir
+
+            await scanner_service.scan_workspace_directory(
+                db=db,
+                project_id=project.id,
+                workspace_dir=scan_workspace,
+                branch=repository.default_branch,
+            )
+
+    repository.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(repository)
+    return repository
+
+

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     GITHUB_APP_ID: str = ""
+    GITHUB_CLIENT_ID: str = ""
     GITHUB_PRIVATE_KEY: str = ""
     GITHUB_WEBHOOK_SECRET: str = ""
 

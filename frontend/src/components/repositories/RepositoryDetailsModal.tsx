@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
 import { RepositoryItem } from '@/types/dashboard';
 import { GitHubIcon, ShieldIcon, CloseIcon, CheckCircleIcon, AlertTriangleIcon } from '../Icons';
 
@@ -9,16 +8,19 @@ interface RepositoryDetailsModalProps {
   repo: RepositoryItem | null;
   onClose: () => void;
   onSyncRepo: (repoId: string, name: string) => void;
+  onScanRepo?: (repoId: string, name: string) => void;
 }
 
-export function RepositoryDetailsModal({ repo, onClose, onSyncRepo }: RepositoryDetailsModalProps) {
-  const router = useRouter();
-
+export function RepositoryDetailsModal({ repo, onClose, onSyncRepo, onScanRepo }: RepositoryDetailsModalProps) {
   if (!repo) return null;
 
   const handleStartScan = () => {
-    onClose();
-    router.push(`/review?repo=${encodeURIComponent(repo.fullName)}&lang=${repo.language}`);
+    if (onScanRepo && repo) {
+      onScanRepo(repo.id, repo.fullName);
+      onClose();
+    } else {
+      onClose();
+    }
   };
 
   return (

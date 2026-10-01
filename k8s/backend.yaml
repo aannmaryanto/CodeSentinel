@@ -53,11 +53,25 @@ spec:
             - name: GEMINI_API_KEY
               value: ""
             - name: GITHUB_APP_ID
-              value: ""
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-secrets
+                  key: GITHUB_APP_ID
+            - name: GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-secrets
+                  key: GITHUB_CLIENT_ID
             - name: GITHUB_PRIVATE_KEY
-              value: ""
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-secrets
+                  key: GITHUB_PRIVATE_KEY
             - name: GITHUB_WEBHOOK_SECRET
-              value: ""
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-secrets
+                  key: GITHUB_WEBHOOK_SECRET
           resources:
             requests:
               cpu: "100m"

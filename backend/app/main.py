@@ -1,7 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api.v1 import api_v1_router, auth_router, projects_router, sources_router, scans_router
+from app.api.v1 import (
+    api_v1_router,
+    auth_router,
+    projects_router,
+    sources_router,
+    scans_router,
+    repositories_router,
+)
 from app.schemas.health import HealthResponse
 from app.core.errors import register_exception_handlers
 
@@ -44,5 +51,6 @@ app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(projects_router, prefix="/api/projects", tags=["Projects"])
 app.include_router(sources_router, prefix="/api/projects", tags=["Source Input"])
 app.include_router(scans_router, prefix="/api/projects", tags=["Scans"])
+app.include_router(repositories_router, prefix="/api/repositories", tags=["Repositories"])
 
 

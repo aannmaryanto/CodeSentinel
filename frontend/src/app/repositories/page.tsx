@@ -84,19 +84,26 @@ export default function RepositoriesPage() {
 
   const handleConnectRepository = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRepoFullName.trim()) return;
+    console.log('[RepositoriesPage.handleConnectRepository] Triggered with input:', newRepoFullName);
+    if (!newRepoFullName.trim()) {
+      console.warn('[RepositoriesPage.handleConnectRepository] Empty input, returning early');
+      return;
+    }
 
     setIsConnecting(true);
     try {
+      console.log('[RepositoriesPage.handleConnectRepository] Submitting:', newRepoFullName.trim());
       const created = await repositoryService.connectRepository(
         newRepoFullName,
         newRepoLanguage
       );
+      console.log('[RepositoriesPage.handleConnectRepository] Success:', created);
       setRepositories((prev) => [created, ...prev]);
       setShowConnectModal(false);
       setNewRepoFullName('');
       showToast(`Connected repository ${created.fullName} to CodeSentinel`, 'success');
     } catch (err: unknown) {
+      console.error('[RepositoriesPage.handleConnectRepository] Error:', err);
       const msg = err instanceof Error ? err.message : 'Failed to connect repository.';
       showToast(msg, 'warning');
     } finally {
@@ -114,8 +121,25 @@ export default function RepositoriesPage() {
         setSelectedRepo(updated);
       }
       showToast(`Manual sync completed for ${repoName}`, 'info');
-    } catch {
-      showToast(`Failed to sync ${repoName}`, 'warning');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : `Failed to sync ${repoName}`;
+      showToast(msg, 'warning');
+    }
+  };
+
+  const handleScanRepository = async (repoId: string, repoName: string) => {
+    try {
+      const updated = await repositoryService.scanRepository(repoId);
+      setRepositories((prev) =>
+        prev.map((r) => (r.id === repoId ? updated : r))
+      );
+      if (selectedRepo?.id === repoId) {
+        setSelectedRepo(updated);
+      }
+      showToast('Security scan started successfully.', 'success');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : `Failed to scan ${repoName}`;
+      showToast(msg, 'warning');
     }
   };
 
@@ -251,6 +275,7 @@ export default function RepositoriesPage() {
                   repo={repo}
                   onViewDetails={setSelectedRepo}
                   onSyncRepo={handleSyncRepository}
+                  onScanRepo={handleScanRepository}
                 />
               ))}
             </div>
@@ -302,6 +327,7 @@ export default function RepositoriesPage() {
           repo={selectedRepo}
           onClose={() => setSelectedRepo(null)}
           onSyncRepo={handleSyncRepository}
+          onScanRepo={handleScanRepository}
         />
 
         {/* Connect Repository Modal */}

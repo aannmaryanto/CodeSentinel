@@ -1,108 +1,128 @@
+import { authService } from '@/services/authService';
 import { RepositoryItem, SupportedLanguage } from '@/types/dashboard';
 
-const STORAGE_KEY = 'codesentinel_repositories';
+const API_URL = typeof window !== 'undefined' ? '' : (process.env.API_URL || '');
 
-const INITIAL_REPOSITORIES: RepositoryItem[] = [
-  {
-    id: 'repo-1',
-    name: 'CodeSentinel',
-    fullName: 'aannmaryanto/CodeSentinel',
-    owner: 'aannmaryanto',
-    language: 'typescript',
-    defaultBranch: 'main',
-    isPrivate: true,
-    lastScan: '10 mins ago',
-    updatedAt: '2 hours ago',
-    openPRs: 2,
-    healthScore: 98,
+export interface BackendRepositoryResponse {
+  id: string;
+  organization_id: string;
+  github_installation_id: string;
+  github_repo_id: number;
+  name: string;
+  full_name: string;
+  owner_handle: string;
+  default_branch: string;
+  is_private: boolean;
+  is_archived: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+function getAuthHeaders(): HeadersInit {
+  const token = authService.getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  } else {
+    console.warn('[repositoryService] No Bearer token found in authService.getToken()');
+  }
+  return headers;
+}
+
+async function handleResponse<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  let data: Record<string, unknown> = {};
+  if (text) {
+    try {
+      data = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      console.error('[repositoryService] Failed to parse JSON response:', text);
+      throw new Error(`Invalid JSON response from server (HTTP ${response.status})`);
+    }
+  }
+
+  if (!response.ok) {
+    const detail = data.detail || data.error;
+    const errorMessage = typeof detail === 'string'
+      ? detail
+      : `HTTP Error ${response.status}: Failed to process repository request.`;
+    console.error(`[repositoryService] Request failed with HTTP ${response.status}:`, errorMessage);
+    throw new Error(errorMessage);
+  }
+
+  return data as unknown as T;
+}
+
+function mapBackendRepoToItem(
+  repo: BackendRepositoryResponse,
+  languageOverride?: SupportedLanguage
+): RepositoryItem {
+  const inferredLanguage: SupportedLanguage = languageOverride || inferLanguageFromRepoName(repo.name);
+
+  return {
+    id: repo.id,
+    name: repo.name,
+    fullName: repo.full_name,
+    owner: repo.owner_handle,
+    language: inferredLanguage,
+    defaultBranch: repo.default_branch || 'main',
+    isPrivate: repo.is_private,
+    lastScan: formatRelativeTime(repo.updated_at),
+    updatedAt: formatRelativeTime(repo.updated_at),
+    openPRs: 0,
+    healthScore: 100,
     vulnerabilityCount: 0,
-    status: 'active',
-    description: 'AI-powered code review and security analysis platform',
-  },
-  {
-    id: 'repo-2',
-    name: 'codesentinel-api',
-    fullName: 'aannmaryanto/codesentinel-api',
-    owner: 'aannmaryanto',
-    language: 'python',
-    defaultBranch: 'main',
-    isPrivate: true,
-    lastScan: '2 hours ago',
-    updatedAt: '1 day ago',
-    openPRs: 4,
-    healthScore: 84,
-    vulnerabilityCount: 2,
-    status: 'active',
-    description: 'FastAPI python core backend for static and AI scanning services',
-  },
-  {
-    id: 'repo-3',
-    name: 'web-dashboard',
-    fullName: 'aannmaryanto/web-dashboard',
-    owner: 'aannmaryanto',
-    language: 'javascript',
-    defaultBranch: 'main',
-    isPrivate: false,
-    lastScan: '1 day ago',
-    updatedAt: '3 days ago',
-    openPRs: 1,
-    healthScore: 92,
-    vulnerabilityCount: 1,
-    status: 'active',
-    description: 'Frontend Next.js user interface web application',
-  },
-  {
-    id: 'repo-4',
-    name: 'auth-microservice',
-    fullName: 'aannmaryanto/auth-microservice',
-    owner: 'aannmaryanto',
-    language: 'go',
-    defaultBranch: 'main',
-    isPrivate: true,
-    lastScan: '3 days ago',
-    updatedAt: '4 days ago',
-    openPRs: 0,
-    healthScore: 78,
-    vulnerabilityCount: 3,
-    status: 'active',
-    description: 'Go authentication and JWT identity verification service',
-  },
-  {
-    id: 'repo-5',
-    name: 'secure-crypto-module',
-    fullName: 'aannmaryanto/secure-crypto-module',
-    owner: 'aannmaryanto',
-    language: 'cpp',
-    defaultBranch: 'main',
-    isPrivate: true,
-    lastScan: '5 days ago',
-    updatedAt: '1 week ago',
-    openPRs: 0,
-    healthScore: 88,
-    vulnerabilityCount: 1,
-    status: 'active',
-    description: 'C++ low-level cryptographic primitives and buffer validators',
-  },
-];
+    status: repo.is_active ? 'active' : 'paused',
+    description: `Connected GitHub repository ${repo.full_name}`,
+  };
+}
+
+function inferLanguageFromRepoName(name: string): SupportedLanguage {
+  const lower = name.toLowerCase();
+  if (lower.includes('py') || lower.includes('python') || lower.includes('api')) return 'python';
+  if (lower.includes('go')) return 'go';
+  if (lower.includes('cpp') || lower.includes('c++')) return 'cpp';
+  if (lower.includes('java')) return 'java';
+  if (lower.includes('js') || lower.includes('javascript')) return 'javascript';
+  return 'typescript';
+}
+
+function formatRelativeTime(isoString: string): string {
+  if (!isoString) return 'Just now';
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return 'Recently';
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} mins ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  } catch {
+    return 'Recently';
+  }
+}
 
 export const repositoryService = {
-  // Fetch all repositories with simulated async latency
+  // GET /api/v1/repositories
   async getRepositories(): Promise<RepositoryItem[]> {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        try {
-          return JSON.parse(stored) as RepositoryItem[];
-        } catch {
-          // Fall back to initial list if parse fails
-        }
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_REPOSITORIES));
-    }
-    return INITIAL_REPOSITORIES;
+    console.log('[repositoryService.getRepositories] Fetching GET /api/v1/repositories');
+    const response = await fetch(`${API_URL}/api/v1/repositories`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+    console.log('[repositoryService.getRepositories] Response status:', response.status);
+    const data = await handleResponse<BackendRepositoryResponse[]>(response);
+    return data.map((repo) => mapBackendRepoToItem(repo));
   },
 
-  // Connect a new GitHub repository
+  // POST /api/v1/repositories
   async connectRepository(
     fullName: string,
     language: SupportedLanguage = 'typescript',
@@ -113,66 +133,55 @@ export const repositoryService = {
       throw new Error('Repository name cannot be empty.');
     }
 
-    const nameParts = trimmed.split('/');
-    const owner = nameParts.length > 1 ? nameParts[0] : 'aannmaryanto';
-    const repoName = nameParts.length > 1 ? nameParts[1] : trimmed;
-    const formattedFullName = `${owner}/${repoName}`;
+    console.log('[repositoryService.connectRepository] Fetching POST /api/v1/repositories with:', trimmed);
+    const response = await fetch(`${API_URL}/api/v1/repositories`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        full_name: trimmed,
+        default_branch: 'main',
+        is_private: isPrivate,
+      }),
+    });
 
-    const currentRepos = await this.getRepositories();
-    const duplicate = currentRepos.find(
-      (r) => r.fullName.toLowerCase() === formattedFullName.toLowerCase()
-    );
-
-    if (duplicate) {
-      throw new Error(`Repository '${formattedFullName}' is already connected.`);
-    }
-
-    const newRepo: RepositoryItem = {
-      id: `repo-${Date.now()}`,
-      name: repoName,
-      fullName: formattedFullName,
-      owner,
-      language,
-      defaultBranch: 'main',
-      isPrivate,
-      lastScan: 'Just now',
-      updatedAt: 'Just now',
-      openPRs: 0,
-      healthScore: 100,
-      vulnerabilityCount: 0,
-      status: 'active',
-      description: `GitHub repository ${formattedFullName} connected for AI security reviews`,
-    };
-
-    const updatedList = [newRepo, ...currentRepos];
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
-    }
-
-    return newRepo;
+    console.log('[repositoryService.connectRepository] Response status:', response.status);
+    const data = await handleResponse<BackendRepositoryResponse>(response);
+    return mapBackendRepoToItem(data, language);
   },
 
-  // Manual sync repository status
-  async syncRepository(repoId: string): Promise<RepositoryItem> {
-    const repos = await this.getRepositories();
-    const repoIndex = repos.findIndex((r) => r.id === repoId);
+  // GET /api/v1/repositories/{repository_id}
+  async getRepositoryDetails(repositoryId: string): Promise<RepositoryItem> {
+    console.log(`[repositoryService.getRepositoryDetails] Fetching GET /api/v1/repositories/${repositoryId}`);
+    const response = await fetch(`${API_URL}/api/v1/repositories/${repositoryId}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+    console.log('[repositoryService.getRepositoryDetails] Response status:', response.status);
+    const data = await handleResponse<BackendRepositoryResponse>(response);
+    return mapBackendRepoToItem(data);
+  },
 
-    if (repoIndex === -1) {
-      throw new Error('Repository not found.');
-    }
+  // POST /api/v1/repositories/{repository_id}/sync
+  async syncRepository(repositoryId: string): Promise<RepositoryItem> {
+    console.log(`[repositoryService.syncRepository] Fetching POST /api/v1/repositories/${repositoryId}/sync`);
+    const response = await fetch(`${API_URL}/api/v1/repositories/${repositoryId}/sync`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    console.log('[repositoryService.syncRepository] Response status:', response.status);
+    const data = await handleResponse<BackendRepositoryResponse>(response);
+    return mapBackendRepoToItem(data);
+  },
 
-    const updatedRepo: RepositoryItem = {
-      ...repos[repoIndex],
-      lastScan: 'Just now',
-      updatedAt: 'Just now',
-      status: 'active',
-    };
-
-    repos[repoIndex] = updatedRepo;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(repos));
-    }
-
-    return updatedRepo;
+  // POST /api/v1/repositories/{repository_id}/scan
+  async scanRepository(repositoryId: string): Promise<RepositoryItem> {
+    console.log(`[repositoryService.scanRepository] Fetching POST /api/v1/repositories/${repositoryId}/scan`);
+    const response = await fetch(`${API_URL}/api/v1/repositories/${repositoryId}/scan`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    console.log('[repositoryService.scanRepository] Response status:', response.status);
+    const data = await handleResponse<BackendRepositoryResponse>(response);
+    return mapBackendRepoToItem(data);
   },
 };
