@@ -16,6 +16,7 @@ from app.models.github import GitHubInstallation
 from app.models.repositories import Repository
 from app.models.projects import Project
 from app.schemas.repositories import RepositoryConnectRequest
+from app.schemas.scans import ScanResponse
 from app.services.github_service import GitHubService, GitHubException, GitHubNotFoundError
 from app.services import scanner_service
 from app.services.scanner.engine import is_safe_workspace_path
@@ -405,11 +406,12 @@ async def scan_repository(
     repository_id: uuid.UUID,
     user_id: uuid.UUID,
     github_service: Optional[GitHubService] = None,
-) -> Repository:
+) -> ScanResponse:
     """
     Triggers a security scan for a connected repository.
     Downloads source code archive securely from GitHub, safely extracts inside TemporaryDirectory(),
     runs static analysis scanner, persists scan/finding records, and updates repository metadata.
+    Returns ScanResponse containing scan details, status, total findings, severity counts, and findings list.
     """
     repository = await get_repository_details(db, repository_id, user_id)
 
@@ -451,16 +453,27 @@ async def scan_repository(
             subdirs = [e for e in entries if os.path.isdir(e)]
             scan_workspace = subdirs[0] if len(subdirs) == 1 else temp_dir
 
-            await scanner_service.scan_workspace_directory(
+            scan = await scanner_service.scan_workspace_directory(
                 db=db,
                 project_id=project.id,
                 workspace_dir=scan_workspace,
                 branch=repository.default_branch,
             )
 
-    repository.updated_at = datetime.now(timezone.utc)
-    await db.commit()
-    await db.refresh(repository)
-    return repository
+            repository.updated_at = datetime.now(timezone.utc)
+            await db.commit()
+            await db.refresh(repository)
+            return await scanner_service.build_scan_response(db=db, scan=scan)
+    else:
+        scan = await scanner_service.scan_workspace_directory(
+            db=db,
+            project_id=project.id,
+            workspace_dir=tempfile.gettempdir(),
+            branch=repository.default_branch,
+        )
+        repository.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(repository)
+        return await scanner_service.build_scan_response(db=db, scan=scan)
 
 

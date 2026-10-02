@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models.users import User
 from app.core.auth_middleware import get_current_user
 from app.schemas.repositories import RepositoryConnectRequest, RepositoryResponse
+from app.schemas.scans import ScanResponse
 from app.services import repository_service
 from app.services.repository_service import RepositoryServiceError
 from app.services.github_service import GitHubService
@@ -97,24 +98,24 @@ async def sync_repository_metadata(
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 
 
-@router.post("/{repository_id}/scan", response_model=RepositoryResponse)
+@router.post("/{repository_id}/scan", response_model=ScanResponse)
 async def scan_repository_code(
     repository_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     github_service: GitHubService = Depends(get_github_service),
-) -> RepositoryResponse:
+) -> ScanResponse:
     """
     Triggers an automated code security scan for a connected repository.
     """
     try:
-        repo = await repository_service.scan_repository(
+        scan_result = await repository_service.scan_repository(
             db=db,
             repository_id=repository_id,
             user_id=current_user.id,
             github_service=github_service,
         )
-        return RepositoryResponse.model_validate(repo)
+        return scan_result
     except RepositoryServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 

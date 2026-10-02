@@ -19,6 +19,47 @@ export interface BackendRepositoryResponse {
   updated_at: string;
 }
 
+export interface BackendFindingResponse {
+  id: string;
+  scan_id: string;
+  project_id: string;
+  rule_id: string;
+  title: string;
+  description: string;
+  severity: string;
+  category: string;
+  file_path: string;
+  line_number: number;
+  code_snippet?: string;
+  recommendation?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface BackendSeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
+}
+
+export interface BackendScanResponse {
+  id: string;
+  project_id: string;
+  status: string;
+  commit_sha?: string;
+  branch?: string;
+  error_message?: string;
+  started_at?: string;
+  completed_at?: string;
+  total_findings: number;
+  severity_counts: BackendSeverityCounts;
+  findings: BackendFindingResponse[];
+  created_at: string;
+  updated_at?: string;
+}
+
 function getAuthHeaders(): HeadersInit {
   const token = authService.getToken();
   const headers: Record<string, string> = {
@@ -174,14 +215,14 @@ export const repositoryService = {
   },
 
   // POST /api/v1/repositories/{repository_id}/scan
-  async scanRepository(repositoryId: string): Promise<RepositoryItem> {
+  async scanRepository(repositoryId: string): Promise<BackendScanResponse> {
     console.log(`[repositoryService.scanRepository] Fetching POST /api/v1/repositories/${repositoryId}/scan`);
     const response = await fetch(`${API_URL}/api/v1/repositories/${repositoryId}/scan`, {
       method: 'POST',
       headers: getAuthHeaders(),
     });
     console.log('[repositoryService.scanRepository] Response status:', response.status);
-    const data = await handleResponse<BackendRepositoryResponse>(response);
-    return mapBackendRepoToItem(data);
+    const data = await handleResponse<BackendScanResponse>(response);
+    return data;
   },
 };

@@ -301,8 +301,12 @@ def test_scan_repository_success(client: TestClient, mock_github_service: AsyncM
 
         scan_resp = client.post(f"/api/v1/repositories/{repo_id}/scan", headers=headers)
         assert scan_resp.status_code == 200
-        assert scan_resp.json()["id"] == repo_id
-        assert scan_resp.json()["full_name"] == "aannmaryanto/scan-test-repo"
+        data = scan_resp.json()
+        assert "id" in data
+        assert data["status"] == "completed"
+        assert "total_findings" in data
+        assert "severity_counts" in data
+        assert "findings" in data
     finally:
         mock_github_service.get_repository.side_effect = None
 
@@ -331,6 +335,10 @@ def test_scan_repository_creates_findings_in_db(client: TestClient, mock_github_
 
     scan_resp = client.post(f"/api/v1/repositories/{repo_id}/scan", headers=headers)
     assert scan_resp.status_code == 200
+    scan_data = scan_resp.json()
+    assert scan_data["status"] == "completed"
+    assert scan_data["total_findings"] >= 1
+    assert len(scan_data["findings"]) >= 1
 
     # Query DB to ensure Scan record is completed and Findings were persisted
     async def verify_db_records():

@@ -22,7 +22,25 @@ export default function RepositoriesPage() {
   const [newRepoFullName, setNewRepoFullName] = useState('');
   const [newRepoLanguage, setNewRepoLanguage] = useState<SupportedLanguage>('typescript');
   const [isConnecting, setIsConnecting] = useState(false);
+  const [scanningRepoId, setScanningRepoId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastNotification | null>(null);
+
+  const calculateHealthScore = (
+    totalFindings: number,
+    severityCounts?: { critical: number; high: number; medium: number; low: number; info: number }
+  ): number => {
+    if (totalFindings === 0) return 100;
+    if (!severityCounts) {
+      return Math.max(0, 100 - totalFindings * 10);
+    }
+    const penalty =
+      severityCounts.critical * 25 +
+      severityCounts.high * 15 +
+      severityCounts.medium * 10 +
+      severityCounts.low * 5 +
+      severityCounts.info * 1;
+    return Math.max(0, 100 - penalty);
+  };
 
   const showToast = (message: string, type: 'success' | 'info' | 'warning' = 'info') => {
     const id = `toast-${Date.now()}`;
@@ -128,18 +146,66 @@ export default function RepositoriesPage() {
   };
 
   const handleScanRepository = async (repoId: string, repoName: string) => {
+    setScanningRepoId(repoId);
     try {
-      const updated = await repositoryService.scanRepository(repoId);
+      const scanResult = await repositoryService.scanRepository(repoId);
+      const healthScore = calculateHealthScore(scanResult.total_findings, scanResult.severity_counts);
+
+      const latestScanData = {
+        id: scanResult.id,
+        status: scanResult.status,
+        totalFindings: scanResult.total_findings,
+        severityCounts: scanResult.severity_counts,
+        findings: scanResult.findings.map((f) => ({
+          id: f.id,
+          rule_id: f.rule_id,
+          title: f.title,
+          description: f.description,
+          severity: f.severity,
+          category: f.category,
+          file_path: f.file_path,
+          line_number: f.line_number,
+          code_snippet: f.code_snippet,
+          recommendation: f.recommendation,
+        })),
+      };
+
       setRepositories((prev) =>
-        prev.map((r) => (r.id === repoId ? updated : r))
+        prev.map((r) =>
+          r.id === repoId
+            ? {
+                ...r,
+                vulnerabilityCount: scanResult.total_findings,
+                healthScore: healthScore,
+                lastScan: 'Just now',
+                latestScan: latestScanData,
+              }
+            : r
+        )
       );
-      if (selectedRepo?.id === repoId) {
-        setSelectedRepo(updated);
-      }
-      showToast('Security scan started successfully.', 'success');
+
+      setSelectedRepo((prev) =>
+        prev && prev.id === repoId
+          ? {
+              ...prev,
+              vulnerabilityCount: scanResult.total_findings,
+              healthScore: healthScore,
+              lastScan: 'Just now',
+              latestScan: latestScanData,
+            }
+          : prev
+      );
+
+      const countMsg = scanResult.total_findings === 0
+        ? 'No security vulnerabilities detected.'
+        : `${scanResult.total_findings} security issue(s) detected.`;
+
+      showToast(`Scan completed for ${repoName}: ${countMsg}`, scanResult.total_findings === 0 ? 'success' : 'warning');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : `Failed to scan ${repoName}`;
       showToast(msg, 'warning');
+    } finally {
+      setScanningRepoId(null);
     }
   };
 
@@ -273,6 +339,7 @@ export default function RepositoriesPage() {
                 <RepositoryCard
                   key={repo.id}
                   repo={repo}
+                  isScanning={scanningRepoId === repo.id}
                   onViewDetails={setSelectedRepo}
                   onSyncRepo={handleSyncRepository}
                   onScanRepo={handleScanRepository}

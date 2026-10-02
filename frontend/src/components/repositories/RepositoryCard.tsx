@@ -9,9 +9,10 @@ interface RepositoryCardProps {
   onViewDetails: (repo: RepositoryItem) => void;
   onSyncRepo: (repoId: string, name: string) => void;
   onScanRepo: (repoId: string, name: string) => void;
+  isScanning?: boolean;
 }
 
-export function RepositoryCard({ repo, onViewDetails, onSyncRepo, onScanRepo }: RepositoryCardProps) {
+export function RepositoryCard({ repo, onViewDetails, onSyncRepo, onScanRepo, isScanning }: RepositoryCardProps) {
   const handleScanCode = () => {
     onScanRepo(repo.id, repo.fullName);
   };
@@ -118,10 +119,11 @@ export function RepositoryCard({ repo, onViewDetails, onSyncRepo, onScanRepo }: 
 
         <button
           onClick={handleScanCode}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-sm transition-all"
+          disabled={isScanning}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium text-xs shadow-sm transition-all"
         >
           <ShieldIcon className="w-3.5 h-3.5" />
-          <span>Scan Code</span>
+          <span>{isScanning ? 'Scanning...' : 'Scan Code'}</span>
         </button>
       </div>
     </div>

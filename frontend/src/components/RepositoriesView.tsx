@@ -104,9 +104,53 @@ export function RepositoriesView({ onShowToast }: RepositoriesViewProps) {
 
   const handleScanRepo = async (repoId: string, repoFullName: string) => {
     try {
-      const updated = await repositoryService.scanRepository(repoId);
-      onShowToast(`Security scan started successfully.`, 'success');
-      setRepos((prev) => prev.map((r) => (r.id === repoId ? updated : r)));
+      const scanResult = await repositoryService.scanRepository(repoId);
+      const totalFindings = scanResult.total_findings;
+      const penalty = scanResult.severity_counts
+        ? scanResult.severity_counts.critical * 25 +
+          scanResult.severity_counts.high * 15 +
+          scanResult.severity_counts.medium * 10 +
+          scanResult.severity_counts.low * 5 +
+          scanResult.severity_counts.info * 1
+        : totalFindings * 10;
+      const healthScore = totalFindings === 0 ? 100 : Math.max(0, 100 - penalty);
+
+      const latestScanData = {
+        id: scanResult.id,
+        status: scanResult.status,
+        totalFindings: scanResult.total_findings,
+        severityCounts: scanResult.severity_counts,
+        findings: scanResult.findings.map((f) => ({
+          id: f.id,
+          rule_id: f.rule_id,
+          title: f.title,
+          description: f.description,
+          severity: f.severity,
+          category: f.category,
+          file_path: f.file_path,
+          line_number: f.line_number,
+          code_snippet: f.code_snippet,
+          recommendation: f.recommendation,
+        })),
+      };
+
+      setRepos((prev) =>
+        prev.map((r) =>
+          r.id === repoId
+            ? {
+                ...r,
+                vulnerabilityCount: totalFindings,
+                healthScore: healthScore,
+                lastScan: 'Just now',
+                latestScan: latestScanData,
+              }
+            : r
+        )
+      );
+      const msg = totalFindings === 0
+        ? `Security scan completed for ${repoFullName}: Clean!`
+        : `Security scan completed for ${repoFullName}: ${totalFindings} issue(s) detected.`;
+      onShowToast(msg, totalFindings === 0 ? 'success' : 'warning');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : `Failed to scan ${repoFullName}`;
       onShowToast(msg, 'warning');

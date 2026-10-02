@@ -73,6 +73,33 @@ export interface ReviewResult {
   findings: SecurityFinding[];
 }
 
+export interface RepositoryScanFinding {
+  id: string;
+  rule_id: string;
+  title: string;
+  description?: string;
+  severity: string;
+  category: string;
+  file_path: string;
+  line_number: number;
+  code_snippet?: string;
+  recommendation?: string;
+}
+
+export interface RepositoryScanSummary {
+  id: string;
+  status: string;
+  totalFindings: number;
+  severityCounts: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    info: number;
+  };
+  findings: RepositoryScanFinding[];
+}
+
 export interface RepositoryItem {
   id: string;
   name: string;
@@ -88,6 +115,7 @@ export interface RepositoryItem {
   vulnerabilityCount: number;
   status: 'active' | 'syncing' | 'paused';
   description?: string;
+  latestScan?: RepositoryScanSummary;
 }
 
 export interface ToastNotification {

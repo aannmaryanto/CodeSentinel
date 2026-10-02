@@ -99,28 +99,10 @@ async def scan_workspace_directory(
         return scan
 
 
-async def run_project_scan(
-    db: AsyncSession,
-    project: Project,
-    source: ProjectSource,
-) -> ScanResponse:
+async def build_scan_response(db: AsyncSession, scan: Scan) -> ScanResponse:
     """
-    Executes a static analysis security scan on the project's uploaded source workspace.
-    Persists findings to the database and updates scan status.
+    Constructs a ScanResponse Pydantic schema from a Scan database model by fetching its findings.
     """
-    extracted_path = os.path.join(source.storage_path, "extracted")
-    if os.path.isdir(extracted_path):
-        workspace_dir = extracted_path
-    else:
-        workspace_dir = source.storage_path
-
-    scan = await scan_workspace_directory(
-        db=db,
-        project_id=project.id,
-        workspace_dir=workspace_dir,
-    )
-
-    # Fetch persisted findings for ScanResponse schema construction
     stmt = select(Finding).where(Finding.scan_id == scan.id)
     res = await db.execute(stmt)
     finding_models = list(res.scalars().all())
@@ -156,6 +138,29 @@ async def run_project_scan(
         created_at=scan.created_at,
         updated_at=scan.updated_at,
     )
+
+
+async def run_project_scan(
+    db: AsyncSession,
+    project: Project,
+    source: ProjectSource,
+) -> ScanResponse:
+    """
+    Executes a static analysis security scan on the project's uploaded source workspace.
+    Persists findings to the database and updates scan status.
+    """
+    extracted_path = os.path.join(source.storage_path, "extracted")
+    if os.path.isdir(extracted_path):
+        workspace_dir = extracted_path
+    else:
+        workspace_dir = source.storage_path
+
+    scan = await scan_workspace_directory(
+        db=db,
+        project_id=project.id,
+        workspace_dir=workspace_dir,
+    )
+    return await build_scan_response(db=db, scan=scan)
 
 
 async def get_project_scans(

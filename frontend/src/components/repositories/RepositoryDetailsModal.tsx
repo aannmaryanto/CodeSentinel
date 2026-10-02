@@ -123,10 +123,54 @@ export function RepositoryDetailsModal({ repo, onClose, onSyncRepo, onScanRepo }
             <span className="text-[11px] opacity-80">
               {repo.vulnerabilityCount === 0
                 ? 'No active vulnerabilities or credential leaks found.'
+                : repo.latestScan
+                ? 'Review flagged security findings listed below.'
                 : 'Run code security scan to view detailed findings and suggested fixes.'}
             </span>
           </div>
         </div>
+
+        {/* Detailed Findings Breakdown */}
+        {repo.latestScan && repo.latestScan.findings && repo.latestScan.findings.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                Scan Findings ({repo.latestScan.totalFindings})
+              </h4>
+              <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                <span className="text-rose-400">Crit: {repo.latestScan.severityCounts.critical}</span>
+                <span className="text-orange-400">High: {repo.latestScan.severityCounts.high}</span>
+                <span className="text-amber-400">Med: {repo.latestScan.severityCounts.medium}</span>
+                <span className="text-blue-400">Low: {repo.latestScan.severityCounts.low}</span>
+              </div>
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+              {repo.latestScan.findings.map((finding) => (
+                <div key={finding.id} className="p-3 rounded-xl bg-[#080b12] border border-[#1e2638] text-xs space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-zinc-200 truncate">{finding.title}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase font-bold shrink-0 ${
+                      finding.severity.toLowerCase() === 'critical' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/50' :
+                      finding.severity.toLowerCase() === 'high' ? 'bg-orange-950/80 text-orange-400 border border-orange-800/50' :
+                      finding.severity.toLowerCase() === 'medium' ? 'bg-amber-950/80 text-amber-400 border border-amber-800/50' :
+                      'bg-blue-950/80 text-blue-400 border border-blue-800/50'
+                    }`}>
+                      {finding.severity}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-mono text-zinc-400">
+                    {finding.file_path}:{finding.line_number}
+                  </p>
+                  {finding.recommendation && (
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      <span className="text-zinc-500 font-semibold">Fix:</span> {finding.recommendation}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Modal Actions */}
         <div className="flex items-center justify-between gap-3 border-t border-[#1e2638] pt-4">
