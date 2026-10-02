@@ -1,6 +1,7 @@
 import ast
 from typing import List, Optional
 from app.services.scanner.rules.base import BaseRule, FindingResult
+from app.services.scanner.rules.utils import is_explicit_placeholder
 
 
 class SecurityASTVisitor(ast.NodeVisitor):
@@ -135,7 +136,7 @@ class SecurityASTVisitor(ast.NodeVisitor):
                     assigned_str = node.value.s
 
                 if assigned_str and len(assigned_str) >= 3:
-                    if assigned_str.lower() not in {"dummy", "placeholder", "change_me", "xxx"}:
+                    if not is_explicit_placeholder(assigned_str):
                         self.findings.append(
                             FindingResult(
                                 rule_id="AST-005",

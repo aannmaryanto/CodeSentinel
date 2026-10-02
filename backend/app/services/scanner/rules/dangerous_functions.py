@@ -1,6 +1,7 @@
 import re
 from typing import List
 from app.services.scanner.rules.base import BaseRule, FindingResult
+from app.services.scanner.rules.utils import is_comment_line, is_rule_definition_line
 
 DANGEROUS_PATTERNS = [
     {
@@ -65,6 +66,22 @@ class DangerousFunctionRule(BaseRule):
         lines = content.splitlines()
 
         for line_idx, line in enumerate(lines, start=1):
+            if is_rule_definition_line(line):
+                continue
+
+            # If line is a comment, only flag if it's commented-out executable code (e.g. # eval(input))
+            # but ignore prose doc comments (e.g. # Avoid using eval() here)
+            if is_comment_line(line):
+                # If comment line doesn't match an actual function call invocation pattern, skip prose comment
+                is_commented_code = False
+                for item in DANGEROUS_PATTERNS:
+                    # Match if comment contains commented-out code call pattern like `# eval(...)` or `# os.system(...)`
+                    if re.search(r"^\s*(?:#|//|/\*|\*|--)\s*(?:\b(?:eval|exec|os\.system|pickle\.(?:loads|load))\s*\(|subprocess\.)", line):
+                        is_commented_code = True
+                        break
+                if not is_commented_code:
+                    continue
+
             for item in DANGEROUS_PATTERNS:
                 matches = re.finditer(item["pattern"], line)
                 for match in matches:

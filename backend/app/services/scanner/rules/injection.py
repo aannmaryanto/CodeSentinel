@@ -1,6 +1,7 @@
 import re
 from typing import List
 from app.services.scanner.rules.base import BaseRule, FindingResult
+from app.services.scanner.rules.utils import is_comment_line, is_rule_definition_line
 
 INJECTION_PATTERNS = [
     {
@@ -65,6 +66,13 @@ class InjectionRule(BaseRule):
         lines = content.splitlines()
 
         for line_idx, line in enumerate(lines, start=1):
+            if is_rule_definition_line(line):
+                continue
+
+            if is_comment_line(line):
+                # Ignore prose comments unless it looks like commented-out code invocation
+                if not re.search(r"^\s*(?:#|//|/\*|\*|--)\s*(?:select|insert|update|delete|os\.system|subprocess\.|os\.popen)", line, re.IGNORECASE):
+                    continue
             for item in INJECTION_PATTERNS:
                 matches = re.finditer(item["pattern"], line, re.IGNORECASE)
                 for match in matches:

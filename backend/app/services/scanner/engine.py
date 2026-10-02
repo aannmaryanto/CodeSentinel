@@ -73,6 +73,13 @@ class ScanEngine:
                 if not is_safe_workspace_path(workspace_abs, abs_file_path):
                     continue
 
+                # Compute relative file path for self-reference check & reporting
+                relative_path = os.path.relpath(abs_file_path, workspace_abs).replace("\\", "/")
+
+                # Targeted exclusion for scanner rule definition files to prevent self-reference false positives
+                if "app/services/scanner/rules/" in relative_path:
+                    continue
+
                 # File extension check
                 _, ext = os.path.splitext(file_name)
                 ext_lower = ext.lower()

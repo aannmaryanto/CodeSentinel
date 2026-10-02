@@ -1,6 +1,7 @@
 import re
 from typing import List
 from app.services.scanner.rules.base import BaseRule, FindingResult
+from app.services.scanner.rules.utils import is_explicit_placeholder, is_rule_definition_line
 
 CREDENTIAL_PATTERNS = [
     {
@@ -47,14 +48,14 @@ class CredentialDetectionRule(BaseRule):
         lines = content.splitlines()
 
         for line_idx, line in enumerate(lines, start=1):
-            # Ignore false positives like variable definitions in schemas/comments without actual values or dummy defaults in test configs if needed,
-            # but match standard assignment syntax
+            if is_rule_definition_line(line):
+                continue
+
             for item in CREDENTIAL_PATTERNS:
                 matches = re.finditer(item["pattern"], line, re.IGNORECASE)
                 for match in matches:
-                    # Check for obvious false positives like example values in documentation comments
                     matched_val = match.group(1) if match.groups() else ""
-                    if matched_val.lower() in {"dummy", "placeholder", "your_password", "change_me", "xxx"}:
+                    if is_explicit_placeholder(matched_val):
                         continue
                     snippet = line.strip()
                     if len(snippet) > 120:
