@@ -116,3 +116,56 @@ DANGEROUS_PATTERNS = [
 
         # Rule definition files should not flag themselves
         assert len(findings) == 0, "Scanner rule definitions must not trigger false positives on themselves"
+
+
+def test_review_service_sample_snippets_not_flagged():
+    sample_service_code = """
+export const defaultCodeSnippets = {
+  typescript: `// TypeScript Sample Code - Security Review
+export function evalUserInput(input: string) {
+  return eval(input);
+}`,
+  python: `# Python Sample Code
+def run_user_script(user_input):
+    command = f"echo {user_input}"
+    subprocess.call(command, shell=True)
+`
+};
+"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        file_path = os.path.join(temp_dir, "reviewService.ts")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(sample_service_code)
+
+        engine = ScanEngine()
+        findings = engine.scan_workspace(temp_dir)
+        rule_ids = [f.rule_id for f in findings]
+
+        # Sample code inside template string literals must NOT be flagged as dangerous function calls
+        assert "DANG-001" not in rule_ids, "eval inside template literal should not be flagged"
+        assert "DANG-004" not in rule_ids, "subprocess.call shell=True inside template literal should not be flagged"
+
+
+def test_executable_eval_and_secrets_in_typescript_still_flagged():
+    active_ts_code = """
+import { jwt } from 'jsonwebtoken';
+
+export function evalUserInput(input: string) {
+    // Active executable code call
+    return eval(input);
+}
+
+const HardcodedAWSKey = "AKIA1234567890ABCDEF";
+"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        file_path = os.path.join(temp_dir, "active_service.ts")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(active_ts_code)
+
+        engine = ScanEngine()
+        findings = engine.scan_workspace(temp_dir)
+        rule_ids = [f.rule_id for f in findings]
+
+        # Active executable eval call and real AWS secret MUST still be flagged
+        assert "DANG-001" in rule_ids, "Active executable eval() in TS file must be flagged"
+        assert "SEC-003" in rule_ids, "Hardcoded AWS secret in TS file must be flagged"

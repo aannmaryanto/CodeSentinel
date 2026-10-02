@@ -1,7 +1,7 @@
 import re
 from typing import List
 from app.services.scanner.rules.base import BaseRule, FindingResult
-from app.services.scanner.rules.utils import is_comment_line, is_rule_definition_line
+from app.services.scanner.rules.utils import is_comment_line, is_rule_definition_line, get_line_template_literal_mask
 
 INJECTION_PATTERNS = [
     {
@@ -64,9 +64,14 @@ class InjectionRule(BaseRule):
     ) -> List[FindingResult]:
         findings: List[FindingResult] = []
         lines = content.splitlines()
+        template_mask = get_line_template_literal_mask(content, relative_path)
 
         for line_idx, line in enumerate(lines, start=1):
             if is_rule_definition_line(line):
+                continue
+
+            # Skip lines inside multiline string template literals (e.g. sample code strings in defaultCodeSnippets)
+            if template_mask[line_idx - 1]:
                 continue
 
             if is_comment_line(line):

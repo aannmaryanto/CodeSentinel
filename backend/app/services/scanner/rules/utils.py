@@ -49,3 +49,43 @@ def is_rule_definition_line(line: str) -> bool:
         or "INJECTION_PATTERNS" in stripped
         or "SECRET_PATTERNS" in stripped
     )
+
+
+def get_line_template_literal_mask(content: str, relative_path: str) -> list[bool]:
+    """
+    Returns a boolean mask for each line in content (0-indexed matching lines array),
+    where True indicates the line is inside a multiline string template literal
+    (e.g., JS/TS backticks `...` or Python triple quotes \"\"\"...\"\"\").
+    """
+    lines = content.splitlines()
+    mask = [False] * len(lines)
+
+    ext = relative_path.lower().rsplit(".", 1)[-1] if "." in relative_path else ""
+    is_js_ts = ext in {"js", "jsx", "ts", "tsx"}
+    is_py = ext == "py"
+
+    if not (is_js_ts or is_py):
+        return mask
+
+    in_multiline_str = False
+
+    for idx, line in enumerate(lines):
+        line_is_template = in_multiline_str
+
+        if is_js_ts:
+            i = 0
+            while i < len(line):
+                if line[i] == "`" and (i == 0 or line[i - 1] != "\\"):
+                    in_multiline_str = not in_multiline_str
+                    line_is_template = True
+                i += 1
+        elif is_py:
+            for delimiter in ['"""', "'''"]:
+                count = line.count(delimiter)
+                if count % 2 != 0:
+                    in_multiline_str = not in_multiline_str
+                    line_is_template = True
+
+        mask[idx] = line_is_template
+
+    return mask
